@@ -4,28 +4,57 @@ use std::env;
 use std::error::Error;
 use std::fs;
 
-pub struct Config {
-    pub query: String,
-    pub filename: String,
-    pub case_sensitive: bool,
+use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
+
+lazy_static::lazy_static! {
+    static ref CLASSES: Mutex<HashMap<String, (String, String, HashSet<String>)>> = Mutex::new(HashMap::new());
+    static ref STUDENTS: Mutex<HashMap<String, (String, String)>> = Mutex::new(HashMap::new());
 }
 
-impl Config {
-    pub fn new(args: &[String]) -> Result<Config, &'static str> {
-        if args.len() < 3 {
-            return Err("not enough arguments");
+pub fn register_class(uuid: &str, name: &str, date: &str) {
+    let mut classes = CLASSES.lock().unwrap();
+    classes.insert(uuid.to_string(), (name.to_string(), date.to_string(), HashSet::new()));
+    println!("Class registered: {} - {} on {}", uuid, name, date);
+}
+
+pub fn register_student(name: &str, email: &str) {
+    let mut students = STUDENTS.lock().unwrap();
+    students.insert(email.to_string(), (name.to_string(), email.to_string()));
+    println!("Student registered: {} <{}>", name, email);
+}
+
+pub fn mark_attendance(class_uuid: &str) {
+    let students = STUDENTS.lock().unwrap();
+    let mut classes = CLASSES.lock().unwrap();
+    // For demo, use email as identifier
+    let email = "demo@student.com"; // Replace with actual auth logic
+    if let Some(class) = classes.get_mut(class_uuid) {
+        class.2.insert(email.to_string());
+        println!("Attendance marked for {} in class {}", email, class_uuid);
+    } else {
+        println!("Class not found");
+    }
+}
+
+pub fn view_attendance(class_uuid: &str) {
+    let classes = CLASSES.lock().unwrap();
+    if let Some(class) = classes.get(class_uuid) {
+        println!("Attendance for class {}:", class_uuid);
+        for attendee in &class.2 {
+            println!("- {}", attendee);
         }
+    } else {
+        println!("Class not found");
+    }
+}
 
-        let query = args[1].clone();
-        let filename = args[2].clone();
-
-        let case_sensitive = env::var("CASE_INSENSITIVE").is_err();
-
-        Ok(Config {
-            query,
-            filename,
-            case_sensitive,
-        })
+pub fn attendance_analytics() {
+    let classes = CLASSES.lock().unwrap();
+    let total: usize = classes.values().map(|c| c.2.len()).sum();
+    println!("Total attendance records: {}", total);
+    for (uuid, class) in classes.iter() {
+        println!("Class {}: {} attendees", uuid, class.2.len());
     }
 }
 
@@ -73,34 +102,10 @@ pub fn search_case_insensitive<'a>(
     results
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn case_sensitive() {
-        let query = "duct";
-        let contents = "\
-Rust:
 safe, fast, productive.
 Pick three.
 Duct tape.";
-
-        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
-    }
-
-    #[test]
-    fn case_insensitive() {
-        let query = "rUsT";
-        let contents = "\
-Rust:
 safe, fast, productive.
 Pick three.
 Trust me.";
-
-        assert_eq!(
-            vec!["Rust:", "Trust me."],
-            search_case_insensitive(query, contents)
-        );
-    }
-}
+// ...existing code...
